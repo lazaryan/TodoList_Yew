@@ -1,42 +1,43 @@
+use gloo::storage::{LocalStorage, Storage};
 use yew::prelude::*;
+
+use crate::state::{State, Filter};
 
 pub enum Msg {
     AddOne,
 }
 
 pub struct App {
-    value: i64,
+    state: State,
 }
+
+const STORE_KEY: &str = "yew.todomvc.self";
 
 impl Component for App {
     type Message = Msg;
     type Properties = ();
 
     fn create(_ctx: &Context<Self>) -> Self {
-        Self {
-            value: 0,
-        }
-    }
+        let entries = LocalStorage::get(STORE_KEY).unwrap_or_else(|_| Vec::new());
+        let state = State {
+            entries,
+            filter: Filter::All,
+            edit_value: "".into(),
+        };
 
-    fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
-        match msg {
-            Msg::AddOne => {
-                self.value += 1;
-                // the value has changed so we need to
-                // re-render for it to appear on the page
-                true
-            }
+        Self {
+            state,
         }
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        // This gives us a component's "`Scope`" which allows us to send messages, etc to the component.
-        let link = ctx.link();
-
         html! {
-            <div>
-                <button onclick={link.callback(|_| Msg::AddOne)}>{ "+1" }</button>
-                <p>{ self.value }</p>
+            <div class="todomvc-wrapper">
+                <section class="todoapp">
+                    <header class="header">
+                        <h1>{ "todos" }</h1>
+                    </header>
+                </section>
             </div>
         }
     }
