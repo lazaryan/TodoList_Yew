@@ -26,6 +26,20 @@ impl State {
 
         filtered_iter.all(|e| e.completed)
     }
+
+    pub fn remove(&mut self, idx: usize) {
+        let idx = {
+            let entries = self
+                .entries
+                .iter()
+                .enumerate()
+                .filter(|&(_, e)| self.filter.fits(e))
+                .collect::<Vec<_>>();
+            let &(idx, _) = entries.get(idx).unwrap();
+            idx
+        };
+        self.entries.remove(idx);
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

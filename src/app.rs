@@ -13,6 +13,7 @@ use crate::state::{State, Filter, Entry};
 pub enum Msg {
     Add(String),
     SetFilter(Filter),
+    Remove(usize),
 }
 
 pub struct App {
@@ -52,6 +53,9 @@ impl Component for App {
             }
             Msg::SetFilter(filter) => {
                 self.state.filter = filter;
+            }
+            Msg::Remove(idx) => {
+                self.state.remove(idx);
             }
         }
 
@@ -140,7 +144,7 @@ impl App {
                         checked={entry.completed}
                     />
                     <label>{ &entry.description }</label>
-                    <button class="destroy" />
+                    <button class="destroy" onclick={link.callback(move |_| Msg::Remove(idx))} />
                 </div>
             </li>
         }
