@@ -1,4 +1,5 @@
 use gloo::storage::{LocalStorage, Storage};
+use strum::IntoEnumIterator;
 use web_sys::HtmlInputElement as InputElement;
 use yew::{
     classes,
@@ -8,16 +9,23 @@ use yew::{
     Classes, Component, Context, Html, NodeRef, TargetCast,
 };
 
-use crate::state::{State, Filter, Entry};
+use crate::state::{Entry, Filter, State};
 
 pub enum Msg {
     Add(String),
+    Edit((usize, String)),
     SetFilter(Filter),
     Remove(usize),
+    Toggle(usize),
+    ToggleAll,
+    ToggleEdit(usize),
+    Focus,
+    ClearCompleted,
 }
 
 pub struct App {
     state: State,
+    focus_ref: NodeRef,
 }
 
 const STORAGE_KEY: &str = "yew.todomvc.self";
@@ -34,8 +42,11 @@ impl Component for App {
             edit_value: "".into(),
         };
 
+        let focus_ref = NodeRef::default();
+
         Self {
             state,
+            focus_ref,
         }
     }
 
@@ -51,11 +62,35 @@ impl Component for App {
                     self.state.entries.push(entry);
                 }
             }
+            Msg::Edit((idx, edit_value)) => {
+                self.state.complete_edit(idx, edit_value.trim().to_string());
+                self.state.edit_value = "".to_string();
+            }
             Msg::SetFilter(filter) => {
                 self.state.filter = filter;
             }
             Msg::Remove(idx) => {
                 self.state.remove(idx);
+            }
+            Msg::Toggle(idx) => {
+                self.state.toggle(idx);
+            }
+            Msg::ToggleAll => {
+                let status = !self.state.is_all_completed();
+                self.state.toggle_all(status);
+            }
+            Msg::ClearCompleted => {
+                self.state.clear_completed();
+            }
+            Msg::ToggleEdit(idx) => {
+                self.state.edit_value = self.state.entries[idx].description.clone();
+                self.state.clear_all_edit();
+                self.state.toggle_edit(idx);
+            }
+            Msg::Focus => {
+                if let Some(input) = self.focus_ref.cast::<InputElement>() {
+                    input.focus().unwrap();
+                }
             }
         }
 
@@ -78,6 +113,14 @@ impl Component for App {
                         { self.view_input(ctx.link()) }
                     </header>
                     <section class={classes!("main", hidden_class)}>
+                        <input
+                            type="checkbox"
+                            class="toggle-all"
+                            id="toggle-all"
+                            checked={self.state.is_all_completed()}
+                            onclick={ctx.link().callback(|_| Msg::ToggleAll)}
+                        />
+                        <label for="toggle-all" />
                         <ul class="todo-list">
                             {
                                 for self.state.entries
@@ -93,6 +136,12 @@ impl Component for App {
                             <strong>{ self.state.total() }</strong>
                             { " item(s) left" }
                         </span>
+                        <ul class="filters">
+                            { for Filter::iter().map(|flt| self.view_filter(flt, ctx.link())) }
+                        </ul>
+                        <button class="clear-completed" onclick={ctx.link().callback(|_| Msg::ClearCompleted)}>
+                            { format!("Clear completed ({})", self.state.total_completed()) }
+                        </button>
                     </footer>
                 </section>
                 <footer class="info">
@@ -106,6 +155,24 @@ impl Component for App {
 }
 
 impl App {
+    fn view_filter(&self, filter: Filter, link: &Scope<Self>) -> Html {
+        let cls = if self.state.filter == filter {
+            "selected"
+        } else {
+            "not-selected"
+        };
+        html! {
+            <li>
+                <a class={cls}
+                   href={filter.as_href()}
+                   onclick={link.callback(move |_| Msg::SetFilter(filter))}
+                >
+                    { filter }
+                </a>
+            </li>
+        }
+    }
+
     fn view_input(&self, link: &Scope<Self>) -> Html {
         let onkeypress = link.batch_callback(|e: KeyboardEvent| {
             if e.key() == "Enter" {
@@ -142,11 +209,43 @@ impl App {
                         type="checkbox"
                         class="toggle"
                         checked={entry.completed}
+                        onclick={link.callback(move |_| Msg::Toggle(idx))}
                     />
-                    <label>{ &entry.description }</label>
+                    <label ondblclick={link.callback(move |_| Msg::ToggleEdit(idx))}>{ &entry.description }</label>
                     <button class="destroy" onclick={link.callback(move |_| Msg::Remove(idx))} />
                 </div>
+                { self.view_entry_edit_input((idx, entry), link) }
             </li>
+        }
+    }
+
+    fn view_entry_edit_input(&self, (idx, entry): (usize, &Entry), link: &Scope<Self>) -> Html {
+        let edit = move |input: InputElement| {
+            let value = input.value();
+            input.set_value("");
+            Msg::Edit((idx, value))
+        };
+
+        let onblur = link.callback(move |e: FocusEvent| edit(e.target_unchecked_into()));
+
+        let onkeypress = link.batch_callback(move |e: KeyboardEvent| {
+            (e.key() == "Enter").then(|| edit(e.target_unchecked_into()))
+        });
+
+        if entry.editing {
+            html! {
+                <input
+                    class="edit"
+                    type="text"
+                    ref={self.focus_ref.clone()}
+                    value={self.state.edit_value.clone()}
+                    onmouseover={link.callback(|_| Msg::Focus)}
+                    {onblur}
+                    {onkeypress}
+                />
+            }
+        } else {
+            html! { <input type="hidden" /> }
         }
     }
 }
